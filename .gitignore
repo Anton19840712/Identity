@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+/.vscode/datbase-client.json
+.DS_Store
