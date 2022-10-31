@@ -1,9 +1,6 @@
 ﻿using IdentityApi.Models;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using System.Diagnostics;
 
 namespace IdentityApi.Controllers
 {
@@ -27,35 +24,54 @@ namespace IdentityApi.Controllers
 		}
 
 		[HttpGet]
-		[AllowAnonymous]
-		public async Task<IActionResult> Register(string returnurl = null)
+		public IActionResult Register()
 		{
-			if (!await _roleManager.RoleExistsAsync("Admin"))
-			{
-				//create roles
-				await _roleManager.CreateAsync(new IdentityRole("Admin"));
-				await _roleManager.CreateAsync(new IdentityRole("User"));
-			}
+			RegisterViewModel registerViewModel = new RegisterViewModel();
 
-			List<SelectListItem> listItems = new List<SelectListItem>();
-			listItems.Add(new SelectListItem()
-			{
-				Value = "Admin",
-				Text = "Admin"
-			});
-			listItems.Add(new SelectListItem()
-			{
-				Value = "User",
-				Text = "User"
-			});
-
-			ViewData["ReturnUrl"] = returnurl;
-			RegisterViewModel registerViewModel = new RegisterViewModel()
-			{
-				RoleList = listItems
-			};
 			return View(registerViewModel);
 		}
+		[HttpPost]
+		[ValidateAntiForgeryToken]
+		public async Task<IActionResult> Register(RegisterViewModel model)
+		{
+			if (ModelState.IsValid)
+			{
+				var user = new ApplicationUser()
+				{
+					UserName = model.Email,
+					Email = model.Email,
+					Name = model.Name,
+				};
 
+				var result = await _userManager.CreateAsync(user, model.Password);
+
+				if (result.Succeeded)
+				{
+					await _signInManager.SignInAsync(user, isPersistent: false);
+					return RedirectToAction("Index", "Home");
+				}
+
+				AddErrors(result);
+			}
+
+			return View(model);
+		}
+
+		private void AddErrors(IdentityResult result)
+		{
+			foreach (var error in result.Errors)
+			{
+				ModelState.AddModelError(string.Empty, error.Description);
+			}
+		}
+		
+
+		[HttpPost]
+		[ValidateAntiForgeryToken]
+		public async Task<IActionResult> LogOff()
+		{
+			await _signInManager.SignOutAsync();
+			return RedirectToAction(nameof(HomeController.Index), "Home");
+		}
 	}
 }
