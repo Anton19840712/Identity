@@ -1,4 +1,6 @@
 using IdentityApi.Data;
+using IdentityApi.Hasher;
+using IdentityApi.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +10,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 services.AddDbContext<ApiContext>(options => options.UseSqlServer(connectionString));
 services.AddIdentity<IdentityUser, IdentityRole>().AddEntityFrameworkStores<ApiContext>();
-
+services.AddSingleton<IPasswordHasher<ApplicationUser>, PasswordHasherWithOldMembershipSupport>();
 services.AddControllersWithViews();
 
 var app = builder.Build();

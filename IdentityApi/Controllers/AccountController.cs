@@ -1,77 +1,140 @@
-﻿using IdentityApi.Models;
+﻿using IdentityApi.Extensions;
+using IdentityApi.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
 
-namespace IdentityApi.Controllers
+namespace IdentityApi.Controllers;
+
+public class AccountController : Controller
 {
-	public class AccountController : Controller
+	private readonly UserManager<IdentityUser> _userManager;
+	private readonly SignInManager<IdentityUser> _signInManager;
+
+	public AccountController(
+		UserManager<IdentityUser> userManager,
+		SignInManager<IdentityUser> signInManager)
 	{
-		private readonly ILogger<AccountController> _logger;
-		private readonly UserManager<IdentityUser> _userManager;
-		private readonly SignInManager<IdentityUser> _signInManager;
-		private readonly RoleManager<IdentityRole> _roleManager;
+		_userManager = userManager;
+		_signInManager = signInManager;
+	}
 
-		public AccountController(
-			ILogger<AccountController> logger, 
-			UserManager<IdentityUser> userManager,
-			SignInManager<IdentityUser> signInManager,
-			RoleManager<IdentityRole> roleManager)
-		{
-			_logger = logger;
-			_userManager = userManager;
-			_signInManager = signInManager;
-			_roleManager = roleManager;
-		}
+	[HttpGet]
+	public IActionResult Register()
+	{
+		RegisterViewModel registerViewModel = new RegisterViewModel();
 
-		[HttpGet]
-		public IActionResult Register()
+		return View(registerViewModel);
+	}
+	[HttpPost]
+	[ValidateAntiForgeryToken]
+	public async Task<IActionResult> Register(RegisterViewModel model)
+	{
+		if (ModelState.IsValid)
 		{
-			RegisterViewModel registerViewModel = new RegisterViewModel();
-
-			return View(registerViewModel);
-		}
-		[HttpPost]
-		[ValidateAntiForgeryToken]
-		public async Task<IActionResult> Register(RegisterViewModel model)
-		{
-			if (ModelState.IsValid)
+			var user = new ApplicationUser()
 			{
-				var user = new ApplicationUser()
-				{
-					UserName = model.Email,
-					Email = model.Email,
-					Name = model.Name,
-				};
+				UserName = model.Email,
+				Email = model.Email,
+				Name = model.Name,
+			};
+			
+			await _userManager.CreateAsync(user, model.Password);
 
-				var result = await _userManager.CreateAsync(user, model.Password);
+			await _signInManager.SignInAsync(user, isPersistent: false);
 
-				if (result.Succeeded)
-				{
-					await _signInManager.SignInAsync(user, isPersistent: false);
-					return RedirectToAction("Index", "Home");
-				}
-
-				AddErrors(result);
-			}
-
-			return View(model);
+			return RedirectToAction("Index", "Home");
 		}
 
-		private void AddErrors(IdentityResult result)
-		{
-			foreach (var error in result.Errors)
-			{
-				ModelState.AddModelError(string.Empty, error.Description);
-			}
-		}
-		
+		return View(model);
+	}
 
-		[HttpPost]
-		[ValidateAntiForgeryToken]
-		public async Task<IActionResult> LogOff()
+	private void AddErrors(IdentityResult result)
+	{
+		foreach (var error in result.Errors)
 		{
-			await _signInManager.SignOutAsync();
-			return RedirectToAction(nameof(HomeController.Index), "Home");
+			ModelState.AddModelError(string.Empty, error.Description);
 		}
 	}
+
+	[HttpPost]
+	[ValidateAntiForgeryToken]
+	public async Task<IActionResult> LogOff()
+	{
+		await _signInManager.SignOutAsync();
+
+		return RedirectToAction(nameof(HomeController.Index), "Home");
+	}
+
+	[HttpGet]
+	public IActionResult Login()
+	{
+		return View();
+	}
+	[HttpPost]
+	[ValidateAntiForgeryToken]
+	public async Task<IActionResult> Login(LoginViewModel model)
+	{
+		if (ModelState.IsValid)
+		{
+			try
+			{
+				var identityUser = await _userManager.FindByEmailAsync(model.Email);
+
+				var hashMd5 = model.Password.ToMd5HashString();
+
+				if (identityUser != null)
+				{
+					if (identityUser.PasswordHash == hashMd5 || identityUser.PasswordHash == null)
+					{
+						var hasher = _userManager.PasswordHasher;
+
+						var hashedPassword = hasher.HashPassword(identityUser, model.Password);
+
+						identityUser.PasswordHash = hashedPassword;
+
+						await _userManager.UpdateAsync(identityUser);
+
+						var result = await _signInManager.PasswordSignInAsync(
+							model.Email,
+							model.Password,
+							model.RememberMe,
+							lockoutOnFailure: true);
+
+						if (result.Succeeded)
+						{
+							return RedirectToAction("Index", "Home");
+						}
+					}
+					else
+					{
+						var result = await _signInManager.PasswordSignInAsync(
+							model.Email,
+							model.Password,
+							model.RememberMe,
+							lockoutOnFailure: true);
+
+						if (result.Succeeded)
+						{
+							return RedirectToAction("Index", "Home");
+						}
+					}
+				}
+
+				ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+
+				return View(model);
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine(e);
+
+				throw;
+			}
+		}
+
+		return View(model);
+	}
+
 }
+
